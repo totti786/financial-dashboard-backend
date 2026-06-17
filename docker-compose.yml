@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - db-data:/data
+    environment:
+      - DATABASE_PATH=/data/sandouk.db
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - COOKIE_SECRET=${COOKIE_SECRET:-change-me-in-production}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://dash.deshli.store,http://localhost:5173}
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  db-data:
