@@ -74,7 +74,7 @@ export function verifyPassword(password: string, hash: string): boolean {
   const { N, r, p, salt, hash: expectedHash } = parsed;
 
   try {
-    const derived = scryptSync(password, salt, DKLEN, { N, r, p });
+    const derived = scryptSync(password, salt, DKLEN, { N, r, p, maxmem: 128 * 1024 * 1024 });
 
     // Timing-safe comparison to prevent timing attacks
     if (derived.length !== expectedHash.length) return false;
@@ -96,6 +96,7 @@ export function hashPassword(password: string): string {
     N: DEFAULT_N,
     r: DEFAULT_R,
     p: DEFAULT_P,
+    maxmem: 128 * 1024 * 1024,
   });
 
   const saltHex = salt.toString('hex');
