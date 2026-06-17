@@ -258,6 +258,7 @@ export async function createTestApp(dbPath: string = ':memory:'): Promise<Return
   await app.register(adminMod.auditRoutes, { prefix: '/api' });
   await app.register(syncMod.syncRoutes, { prefix: '/api/sync' });
   await app.register(syncMod.dataVersionRoutes, { prefix: '/api' });
+  await app.register(syncMod.monthlySalesRoutes, { prefix: '/api' });
 
   // Bump data version after every successful mutation
   const { bumpVersion } = await import('../services/data-version.service.js');

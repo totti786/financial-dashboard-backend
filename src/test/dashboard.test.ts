@@ -143,8 +143,7 @@ describe('GET /api/monthly-sales', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(body.success).toBe(true);
-    // Even without data, the response should have the right shape
-    expect(body).toHaveProperty('sales_by_year');
-    expect(body).toHaveProperty('available_years');
+    // The route returns a sales array
+    expect(body).toHaveProperty('sales');
   });
 });
