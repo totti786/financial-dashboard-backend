@@ -62,6 +62,16 @@ jobs:
             "${{ secrets.VPS_WEBHOOK_URL }}/staging/backend" \
             -H "Content-Type: application/json" \
             -H "X-Webhook-Token: ${{ secrets.WEBHOOK_TOKEN }}" \
-            -d '{"image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging", "service": "backend-staging"}' \
+            -d '{
+              "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging",
+              "service": "backend-staging",
+              "env": {
+                "JWT_SECRET": "${{ secrets.JWT_SECRET }}",
+                "COOKIE_SECRET": "${{ secrets.COOKIE_SECRET }}",
+                "ALLOWED_ORIGINS": "${{ secrets.ALLOWED_ORIGINS }}",
+                "DATABASE_PATH": "/data/sandouk.db",
+                "NODE_ENV": "production"
+              }
+            }' \
             --fail-with-body
           echo "Staging deployment triggered successfully!"
