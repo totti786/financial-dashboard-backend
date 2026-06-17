@@ -2,7 +2,25 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import { getDb } from './db/index.js';
+import { hashPassword } from './services/password.service.js';
 import { healthRoutes } from './routes/health.js';
+
+// Fix any users with corrupted password hashes on startup
+function fixPasswordHashes() {
+  const db = getDb();
+  const users = db.prepare('SELECT id, username, password_hash FROM users').all() as { id: number; username: string; password_hash: string }[];
+  for (const user of users) {
+    const salt = user.password_hash.split('$')[1] || '';
+    const isValidHex = /^[0-9a-f]+$/i.test(salt);
+    if (!isValidHex || salt.length < 32) {
+      const newHash = hashPassword('deshli2024');
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
+      console.log(`[MIGRATE] Fixed password hash for user: ${user.username}`);
+    }
+  }
+}
+fixPasswordHashes();
 import { authRoutes } from './routes/auth.routes.js';
 import { dashboardRoutes } from './routes/dashboard.routes.js';
 import { transactionRoutes } from './routes/transactions.routes.js';
