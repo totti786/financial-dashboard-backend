@@ -87,7 +87,7 @@ interface DailySaleEntry {
 }
 
 function calculateDailySales(db: ReturnType<typeof getDrizzleDb>): DailySaleEntry[] {
-  // Income with مبيعات or exactly "شام كاش"
+  // Only income: مبيعات in description OR exactly "شام كاش"
   const incomeSales = db
     .select({
       date: income.date,
@@ -98,27 +98,10 @@ function calculateDailySales(db: ReturnType<typeof getDrizzleDb>): DailySaleEntr
     .where(sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`)
     .all();
 
-  // Expenses exactly "شام كاش"
-  const expenseSales = db
-    .select({
-      date: expenses.date,
-      amount: expenses.amount,
-      description: expenses.description,
-    })
-    .from(expenses)
-    .where(eq(expenses.description, 'شام كاش'))
-    .all();
-
-  // Aggregate by date
+  // Aggregate by date (income only, no expenses)
   const dailyMap = new Map<string, number>();
 
   for (const r of incomeSales) {
-    if (r.date) {
-      const key = r.date;
-      dailyMap.set(key, (dailyMap.get(key) ?? 0) + r.amount);
-    }
-  }
-  for (const r of expenseSales) {
     if (r.date) {
       const key = r.date;
       dailyMap.set(key, (dailyMap.get(key) ?? 0) + r.amount);
@@ -190,18 +173,13 @@ export function getDashboardData(): DashboardData {
 
   const total_income = baseIncome + carpentryShopIncome + rentalsIncome;
 
-  // total_sales: income with مبيعات or exactly "شام كاش" + expenses exactly "شام كاش"
+  // total_sales: income with مبيعات or exactly "شام كاش" (income-only, no expenses)
   const salesIncome = db
     .select({ total: sum(income.amount) })
     .from(income)
     .where(sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`)
     .get();
-  const salesExpenses = db
-    .select({ total: sum(expenses.amount) })
-    .from(expenses)
-    .where(eq(expenses.description, 'شام كاش'))
-    .get();
-  const total_sales = Number(salesIncome?.total ?? 0) + Number(salesExpenses?.total ?? 0);
+  const total_sales = Number(salesIncome?.total ?? 0);
 
   // sham_cash_income
   const shamCashExpenses = db
