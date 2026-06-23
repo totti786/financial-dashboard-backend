@@ -21,7 +21,7 @@ export async function streamRoutes(app: FastifyInstance) {
 
     // Send initial version
     const initial = getDataVersion();
-    reply.raw.write(`data: ${JSON.stringify(initial)}\n\n`);
+    reply.raw.write(`event: data_version\ndata: ${JSON.stringify(initial)}\n\n`);
 
     // Heartbeat every 25s to keep connection alive through proxies
     const heartbeat = setInterval(() => {
@@ -35,7 +35,7 @@ export async function streamRoutes(app: FastifyInstance) {
     // Register client for version change broadcasts
     const send = (data: string) => {
       try {
-        reply.raw.write(`data: ${data}\n\n`);
+        reply.raw.write(`event: data_version\ndata: ${data}\n\n`);
       } catch {
         // Client disconnected
       }
