@@ -10,7 +10,7 @@ import {
   monthlySales,
   trackedCells,
 } from '../db/schema.js';
-import { eq, and, like, sum, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, like, not, sum, gte, lte, sql } from 'drizzle-orm';
 import type { DashboardData, MonthlySalesResponse } from '../schemas/dashboard.schema.js';
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -160,11 +160,11 @@ export function getDashboardData(): DashboardData {
   const month = currentMonth();
   const year = CURRENT_YEAR;
 
-  // total_income: all income except sham cash + carpentry + rent
+  // total_income: all income except sham cash (by flag AND by description) + carpentry + rent
   const totalIncomeRow = db
     .select({ total: sum(income.amount) })
     .from(income)
-    .where(eq(income.isShamCash, 0))
+    .where(and(eq(income.isShamCash, 0), not(like(income.description, '%شام كاش%'))))
     .get();
   const baseIncome = Number(totalIncomeRow?.total ?? 0);
 
