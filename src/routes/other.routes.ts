@@ -36,7 +36,7 @@ export async function otherRoutes(app: FastifyInstance) {
         const filtered = allSuppliers.filter((s) =>
           OTHER_SHEETS.includes(s.name),
         );
-        return { success: true, suppliers: filtered };
+        return { success: true, others: filtered };
       } catch (error) {
         _request.log.error(error, 'Error fetching other entities');
         return reply
