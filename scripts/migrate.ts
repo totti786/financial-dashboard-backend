@@ -19,10 +19,11 @@ import fs from 'fs';
 const args = process.argv.slice(2);
 const sourceIdx = args.indexOf('--source');
 const targetIdx = args.indexOf('--target');
+const skipUsers = args.includes('--skip-users');
 
 if (sourceIdx === -1 || targetIdx === -1) {
   console.error(
-    'Usage: npx tsx scripts/migrate.ts --source <old.db> --target <new.db>'
+    'Usage: npx tsx scripts/migrate.ts --source <old.db> --target <new.db> [--skip-users]'
   );
   process.exit(1);
 }
@@ -288,14 +289,18 @@ const counts: Record<string, number> = {
 };
 
 // ===== Migrate users =====
-console.log('Migrating users...');
-const oldUsers = sourceDb.prepare('SELECT * FROM users').all() as Record<string, unknown>[];
-const insertUser = targetDb.prepare(
-  'INSERT INTO users (username, password_hash, permission, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-);
-for (const u of oldUsers) {
-  insertUser.run(u.username, u.password_hash, u.permission || 'view', u.created_at, u.updated_at);
-  counts.users++;
+if (skipUsers) {
+  console.log('Skipping users (--skip-users flag set).');
+} else {
+  console.log('Migrating users...');
+  const oldUsers = sourceDb.prepare('SELECT * FROM users').all() as Record<string, unknown>[];
+  const insertUser = targetDb.prepare(
+    'INSERT INTO users (username, password_hash, permission, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+  );
+  for (const u of oldUsers) {
+    insertUser.run(u.username, u.password_hash, u.permission || 'view', u.created_at, u.updated_at);
+    counts.users++;
+  }
 }
 
 // ===== Migrate income =====
