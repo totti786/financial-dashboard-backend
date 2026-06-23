@@ -22,6 +22,7 @@ const app = Fastify({ logger: true });
 await app.register(cors, {
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 });
 await app.register(cookie, { secret: process.env.COOKIE_SECRET || 'dev-secret' });
 await app.register(healthRoutes, { prefix: '/api' });
