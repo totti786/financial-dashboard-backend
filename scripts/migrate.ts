@@ -299,18 +299,24 @@ for (const u of oldUsers) {
 }
 
 // ===== Migrate income =====
-// Note: old income table does NOT have is_sales or is_sham_cash columns
+// Old income table does NOT have is_sales or is_sham_cash columns
+// Detect from Arabic description text: مبيعات = sales, شام كاش = sham cash
 console.log('Migrating income...');
 const oldIncome = sourceDb.prepare('SELECT * FROM income').all() as Record<string, unknown>[];
 const insertIncome = targetDb.prepare(
-  'INSERT INTO income (amount, description, date, row_number, is_sales, is_sham_cash, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, ?, ?)'
+  'INSERT INTO income (amount, description, date, row_number, is_sales, is_sham_cash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
 );
 for (const r of oldIncome) {
+  const desc = String(r.description || '');
+  const isSales = desc.includes('مبيعات') ? 1 : 0;
+  const isShamCash = desc.includes('شام كاش') ? 1 : 0;
   insertIncome.run(
     parseAmount(r.amount as string | number | null),
     r.description,
     parseDate(r.date as string | null),
     r.row_number,
+    isSales,
+    isShamCash,
     r.created_at,
     r.updated_at,
   );
