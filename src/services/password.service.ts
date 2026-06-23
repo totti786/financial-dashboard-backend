@@ -7,7 +7,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 // Default parameters (matching old werkzeug): N=32768, r=8, p=1, dklen=64
 
 const SCRYPT_PREFIX = 'scrypt:';
-const DEFAULT_N = 32768;
+const DEFAULT_N = 16384;
 const DEFAULT_R = 8;
 const DEFAULT_P = 1;
 const DKLEN = 64;

@@ -1,10 +1,9 @@
 // ============================================================================
-// Sync Routes — sync trigger, status, check, data-version, and monthly-sales
+// Sync Routes — sync trigger, status, check, and data-version
 // ============================================================================
 
 import type { FastifyInstance } from 'fastify';
-import { requireAuth, requirePermission } from '../middleware/auth.js';
-import { getDb } from '../db/index.js';
+import { requirePermission } from '../middleware/auth.js';
 import {
   getSyncStatus,
   triggerSync,
@@ -64,32 +63,4 @@ export async function dataVersionRoutes(app: FastifyInstance) {
   });
 }
 
-// ── Monthly Sales Routes (/api) ─────────────────────────────────────────────
 
-export async function monthlySalesRoutes(app: FastifyInstance) {
-  // GET /api/monthly-sales — returns monthly sales by year (requires auth)
-  app.get('/monthly-sales', { preHandler: [requireAuth] }, async (request, reply) => {
-    try {
-      const query = request.query as { year?: string };
-      const db = getDb();
-
-      let rows;
-      if (query.year) {
-        rows = db
-          .prepare(
-            'SELECT id, year, month_number, month_name, sales_amount FROM monthly_sales WHERE year = ? ORDER BY month_number',
-          )
-          .all(Number(query.year));
-      } else {
-        rows = db
-          .prepare('SELECT id, year, month_number, month_name, sales_amount FROM monthly_sales ORDER BY year, month_number')
-          .all();
-      }
-
-      return reply.send({ success: true, sales: rows });
-    } catch (error) {
-      request.log.error(error, 'Error fetching monthly sales');
-      return reply.status(500).send({ success: false, error: 'Internal server error' });
-    }
-  });
-}
