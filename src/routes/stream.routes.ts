@@ -8,11 +8,15 @@ import { addClient, removeClient, getDataVersion } from '../services/data-versio
 export async function streamRoutes(app: FastifyInstance) {
   // GET /api/stream — SSE endpoint
   app.get('/stream', async (request: FastifyRequest, reply: FastifyReply) => {
+    // Get the origin from the request to set proper CORS headers
+    const origin = request.headers.origin || '*';
+    
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     // Send initial version

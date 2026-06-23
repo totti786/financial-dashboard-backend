@@ -13,7 +13,7 @@ import { rentRoutes } from './routes/rent.routes.js';
 import { warehouseRoutes } from './routes/warehouse.routes.js';
 import { carpentryRoutes } from './routes/carpentry.routes.js';
 import { adminRoutes, userRoutes, auditRoutes } from './routes/admin.routes.js';
-import { syncRoutes, dataVersionRoutes, monthlySalesRoutes } from './routes/sync.routes.js';
+import { syncRoutes, dataVersionRoutes } from './routes/sync.routes.js';
 import { streamRoutes } from './routes/stream.routes.js';
 import { bumpVersion } from './services/data-version.service.js';
 
@@ -39,7 +39,6 @@ await app.register(userRoutes, { prefix: '/api' });
 await app.register(auditRoutes, { prefix: '/api' });
 await app.register(syncRoutes, { prefix: '/api/sync' });
 await app.register(dataVersionRoutes, { prefix: '/api' });
-await app.register(monthlySalesRoutes, { prefix: '/api' });
 await app.register(streamRoutes, { prefix: '/api' });
 
 // Bump data version after every successful mutation (POST/PUT/DELETE with 2xx)
