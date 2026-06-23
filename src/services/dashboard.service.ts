@@ -31,7 +31,7 @@ function getCarpentryShopIncome(db: ReturnType<typeof getDrizzleDb>, month: numb
   return Number(row?.total ?? 0);
 }
 
-/** Carpentry shop expenses for the given month/year (excludes internal) */
+/** Carpentry shop expenses for the given month/year (all expenses) */
 function getCarpentryShopExpenses(db: ReturnType<typeof getDrizzleDb>, month: number, year: number): number {
   const row = db
     .select({ total: sum(carpentryExpenses.amount) })
@@ -40,7 +40,6 @@ function getCarpentryShopExpenses(db: ReturnType<typeof getDrizzleDb>, month: nu
       and(
         eq(carpentryExpenses.month, month),
         eq(carpentryExpenses.year, year),
-        eq(carpentryExpenses.isInternal, 0),
       ),
     )
     .get();
@@ -178,11 +177,11 @@ export function getDashboardData(): DashboardData {
   const month = currentMonth();
   const year = CURRENT_YEAR;
 
-  // total_income: non-sales, non-sham-cash income + carpentry + rent
+  // total_income: all income except sham cash + carpentry + rent
   const totalIncomeRow = db
     .select({ total: sum(income.amount) })
     .from(income)
-    .where(and(eq(income.isSales, 0), eq(income.isShamCash, 0)))
+    .where(eq(income.isShamCash, 0))
     .get();
   const baseIncome = Number(totalIncomeRow?.total ?? 0);
 
@@ -230,16 +229,17 @@ export function getDashboardData(): DashboardData {
     .get();
   const sham_cash_expenses = Number(shamCashExpensesRows?.total ?? 0);
 
-  // total_expenses: all expenses + carpentry expenses - sham cash expenses
+  // total_expenses: regular expenses (excluding sham cash, excluding carpentry)
   const totalExpensesRow = db
     .select({ total: sum(expenses.amount) })
     .from(expenses)
+    .where(sql`${expenses.description} NOT LIKE '%شام كاش%'`)
     .get();
-  const allExpenses = Number(totalExpensesRow?.total ?? 0);
+  const regularExpenses = Number(totalExpensesRow?.total ?? 0);
   const carpentryShopExpenses = getCarpentryShopExpenses(db, month, year);
-  const total_expenses = allExpenses + carpentryShopExpenses - sham_cash_expenses;
+  const total_expenses = regularExpenses;
 
-  // net_income
+  // net_income: all income except sham cash + carpentry + rent - regular expenses
   const net_income = total_income - total_expenses;
 
   // total_debts
@@ -263,8 +263,8 @@ export function getDashboardData(): DashboardData {
   // net_sham_cash_income
   const net_sham_cash_income = sham_cash_income - sham_cash_expenses;
 
-  // total_payments = all expenses - sham_cash_expenses
-  const total_payments = allExpenses - sham_cash_expenses;
+  // total_payments = regular expenses (excluding sham cash)
+  const total_payments = regularExpenses;
 
   // daily_sales + projections
   const daily_sales = calculateDailySales(db);
