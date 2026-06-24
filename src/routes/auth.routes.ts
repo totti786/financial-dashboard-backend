@@ -6,7 +6,7 @@ import {
   getAllUsers,
 } from '../db/index.js';
 import { verifyPassword, hashPassword } from '../services/password.service.js';
-import { generateTokens, verifyToken } from '../services/auth.service.js';
+import { generateTokens, verifyToken, refreshTokens } from '../services/auth.service.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 
 // ── Cookie helpers ─────────────────────────────────────────────────────────
@@ -53,11 +53,14 @@ export async function authRoutes(app: FastifyInstance) {
           .send({ success: false, error: 'Invalid username or password' });
       }
 
-      const tokens = generateTokens({
-        userId: user.id,
-        username: user.username,
-        permission: user.permission,
-      });
+      const tokens = generateTokens(
+        {
+          userId: user.id,
+          username: user.username,
+          permission: user.permission,
+        },
+        rememberMe,
+      );
 
       const tokenMaxAge = rememberMe ? THIRTY_DAYS : SEVEN_DAYS;
 
@@ -138,6 +141,37 @@ export async function authRoutes(app: FastifyInstance) {
     } catch (error) {
       request.log.error(error, 'Session error');
       return { authenticated: false };
+    }
+  });
+
+  // ── POST /api/auth/refresh ─────────────────────────────────────────────
+  app.post('/refresh', async (request, reply) => {
+    try {
+      const refreshToken = request.cookies?.refresh_token;
+      if (!refreshToken) {
+        return reply
+          .status(401)
+          .send({ success: false, error: 'No refresh token' });
+      }
+
+      let tokens;
+      try {
+        tokens = refreshTokens(refreshToken);
+      } catch {
+        return reply
+          .status(401)
+          .send({ success: false, error: 'Invalid or expired refresh token' });
+      }
+
+      // Set new access token cookie (7 days — refresh tokens max out at 7d anyway)
+      reply.setCookie('token', tokens.accessToken, cookieOptions(SEVEN_DAYS));
+
+      return { success: true };
+    } catch (error) {
+      request.log.error(error, 'Token refresh error');
+      return reply
+        .status(500)
+        .send({ success: false, error: 'Internal server error' });
     }
   });
 

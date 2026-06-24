@@ -23,19 +23,26 @@ function getSecret(): string {
   return secret;
 }
 
-const ACCESS_TOKEN_EXPIRY = '15m';
+const ACCESS_TOKEN_EXPIRY = '7d';
+const ACCESS_TOKEN_EXPIRY_REMEMBER = '30d';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
 // ── Token operations ───────────────────────────────────────────────────────
 
 /**
- * Generate an access token (15 min) and refresh token (7 days).
+ * Generate an access token and refresh token.
+ *
+ * Without "remember me": access token expires in 7 days.
+ * With "remember me": access token expires in 30 days.
  */
-export function generateTokens(payload: JwtPayload): TokenPair {
+export function generateTokens(
+  payload: JwtPayload,
+  rememberMe = false,
+): TokenPair {
   const secret = getSecret();
 
   const accessToken = jwt.sign(payload, secret, {
-    expiresIn: ACCESS_TOKEN_EXPIRY,
+    expiresIn: rememberMe ? ACCESS_TOKEN_EXPIRY_REMEMBER : ACCESS_TOKEN_EXPIRY,
   });
 
   const refreshToken = jwt.sign(
