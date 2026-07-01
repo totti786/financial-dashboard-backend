@@ -16,6 +16,7 @@ import { adminRoutes, userRoutes, auditRoutes } from './routes/admin.routes.js';
 import { syncRoutes, dataVersionRoutes } from './routes/sync.routes.js';
 import { streamRoutes } from './routes/stream.routes.js';
 import { bumpVersion } from './services/data-version.service.js';
+import { recordAuditEvent } from './services/audit.service.js';
 import { migrateMonthlySalesFinalization, migrateRentPaymentsForReportingPeriods } from './db/index.js';
 
 const app = Fastify({ logger: true });
@@ -46,12 +47,28 @@ await app.register(streamRoutes, { prefix: '/api' });
 migrateRentPaymentsForReportingPeriods();
 migrateMonthlySalesFinalization();
 
-// Bump data version after every successful mutation (POST/PUT/DELETE with 2xx)
-app.addHook('onResponse', (request, reply, done) => {
-  if (['POST', 'PUT', 'DELETE'].includes(request.method) && reply.statusCode >= 200 && reply.statusCode < 300) {
-    bumpVersion();
-  }
-  done();
+// Record audit events and bump data version after every successful mutation.
+app.addHook('onResponse', async (request, reply) => {
+  if (!['POST', 'PUT', 'DELETE'].includes(request.method)) return;
+  if (reply.statusCode < 200 || reply.statusCode >= 300) return;
+
+  const path = request.url || request.raw.url || '';
+  if (path.startsWith('/api/health')) return;
+
+  recordAuditEvent({
+    method: request.method,
+    path,
+    statusCode: reply.statusCode,
+    userId: request.user?.userId ?? null,
+    username: request.user?.username ?? null,
+    ipAddress: request.ip,
+    userAgent: request.headers['user-agent'] ?? null,
+    routeParams: request.params,
+    query: request.query,
+    body: request.body,
+  });
+
+  bumpVersion();
 });
 
 const port = Number(process.env.PORT) || 5000;
