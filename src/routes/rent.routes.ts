@@ -13,18 +13,27 @@ import {
   UpdateRentMonthRequestSchema,
   DeleteRenteeRequestSchema,
 } from '../schemas/rent.schema.js';
+import { z } from 'zod';
+
+const RentQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+});
 
 export async function rentRoutes(app: FastifyInstance) {
   // ── GET /api/rent ──────────────────────────────────────────────────────
   app.get(
     '/rent',
     { preHandler: [requireAuth] },
-    async (_request, reply) => {
+    async (request, reply) => {
       try {
-        const rentData = getRentData();
+        const query = RentQuerySchema.safeParse(request.query);
+        if (!query.success) {
+          return reply.status(400).send({ success: false, error: query.error.message });
+        }
+        const rentData = getRentData(query.data.year);
         return { success: true, rent_data: rentData };
       } catch (error) {
-        _request.log.error(error, 'Error fetching rent data');
+        request.log.error(error, 'Error fetching rent data');
         return reply
           .status(500)
           .send({ success: false, error: 'Internal server error' });
@@ -45,8 +54,8 @@ export async function rentRoutes(app: FastifyInstance) {
             .send({ success: false, error: parsed.error.message });
         }
 
-        const { rentee_name, rent_amount } = parsed.data;
-        const result = addRentee(rentee_name, rent_amount);
+        const { rentee_name, rent_amount, year } = parsed.data;
+        const result = addRentee(rentee_name, rent_amount, year);
         return { success: true, result };
       } catch (error) {
         request.log.error(error, 'Error adding rentee');
@@ -103,7 +112,7 @@ export async function rentRoutes(app: FastifyInstance) {
             .send({ success: false, error: parsed.error.message });
         }
 
-        const { row_number, month, is_paid, is_sham_cash } = parsed.data;
+        const { row_number, year, month, is_paid, is_sham_cash } = parsed.data;
 
         if (month < 1 || month > 12) {
           return reply
@@ -111,7 +120,7 @@ export async function rentRoutes(app: FastifyInstance) {
             .send({ success: false, error: 'Month must be between 1 and 12' });
         }
 
-        updateRentMonth(row_number, month, is_paid, is_sham_cash);
+        updateRentMonth(row_number, year, month, is_paid, is_sham_cash);
         return { success: true };
       } catch (error) {
         request.log.error(error, 'Error updating rent month');

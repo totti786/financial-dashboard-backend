@@ -129,11 +129,13 @@ export const rent = sqliteTable('rent', {
 export const rentPayments = sqliteTable('rent_payments', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   rentId: integer('rent_id').notNull().references(() => rent.id, { onDelete: 'cascade' }),
+  year: integer('year').notNull(),
   month: integer('month').notNull(),
+  rentAmount: real('rent_amount').notNull().default(0),
   isPaid: integer('is_paid').notNull().default(0),
   isShamCash: integer('is_sham_cash').notNull().default(0),
 }, (table) => ({
-  uniqueRentMonth: unique('unique_rent_month').on(table.rentId, table.month),
+  uniqueRentMonth: unique('unique_rent_year_month').on(table.rentId, table.year, table.month),
 }));
 
 // ============================================================================

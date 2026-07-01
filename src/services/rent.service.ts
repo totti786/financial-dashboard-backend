@@ -36,9 +36,9 @@ export interface RenteeData {
  * - monthly_details: array of { month, is_paid, is_sham_cash }
  * - sham_cash_payments: 12-element array (1=sham_cash, 0=not)
  */
-export function getRentData(): RenteeData[] {
+export function getRentData(year: number = new Date().getFullYear()): RenteeData[] {
   const rentees = db.select().from(rent).all();
-  const allPayments = db.select().from(rentPayments).all();
+  const allPayments = db.select().from(rentPayments).where(eq(rentPayments.year, year)).all();
 
   // Index payments by rent_id
   const paymentsByRentId = new Map<number, typeof allPayments>();
@@ -97,6 +97,7 @@ export function getRentData(): RenteeData[] {
 export function addRentee(
   renteeName: string,
   rentAmount?: number,
+  year: number = new Date().getFullYear(),
 ): { row_number: number; id: number } {
   // Determine next row_number
   const existing = db
@@ -112,6 +113,7 @@ export function addRentee(
     .values({
       renteeName,
       rentAmount: rentAmount ?? 0,
+      year,
       rowNumber,
     })
     .run();
@@ -123,7 +125,9 @@ export function addRentee(
   for (let month = 1; month <= 12; month++) {
     paymentValues.push({
       rentId,
+      year,
       month,
+      rentAmount: rentAmount ?? 0,
       isPaid: 0,
       isShamCash: 0,
     });
@@ -157,6 +161,7 @@ export function updateRentee(
  */
 export function updateRentMonth(
   rowNumber: number,
+  year: number,
   month: number,
   isPaid: boolean,
   isShamCash?: boolean,
@@ -174,20 +179,33 @@ export function updateRentMonth(
 
   const rentId = renteeRecord[0].id;
 
-  const updateData: Record<string, unknown> = {};
-  updateData.isPaid = isPaid ? 1 : 0;
-  if (isShamCash !== undefined) {
-    updateData.isShamCash = isShamCash ? 1 : 0;
-  }
+  const currentPayment = db
+    .select()
+    .from(rentPayments)
+    .where(and(
+      eq(rentPayments.rentId, rentId),
+      eq(rentPayments.year, year),
+      eq(rentPayments.month, month),
+    ))
+    .get();
 
-  db.update(rentPayments)
-    .set(updateData)
-    .where(
-      and(
-        eq(rentPayments.rentId, rentId),
-        eq(rentPayments.month, month),
-      ),
-    )
+  db.insert(rentPayments)
+    .values({
+      rentId,
+      year,
+      month,
+      rentAmount: renteeRecord[0].rentAmount ?? 0,
+      isPaid: isPaid ? 1 : 0,
+      isShamCash: isShamCash === undefined ? (currentPayment?.isShamCash ?? 0) : (isShamCash ? 1 : 0),
+    })
+    .onConflictDoUpdate({
+      target: [rentPayments.rentId, rentPayments.year, rentPayments.month],
+      set: {
+        rentAmount: renteeRecord[0].rentAmount ?? 0,
+        isPaid: isPaid ? 1 : 0,
+        ...(isShamCash === undefined ? {} : { isShamCash: isShamCash ? 1 : 0 }),
+      },
+    })
     .run();
 }
 

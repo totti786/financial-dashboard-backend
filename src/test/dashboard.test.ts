@@ -55,7 +55,7 @@ describe('GET /api/data', () => {
     await app.inject({
       method: 'POST',
       url: '/api/rent/month',
-      payload: { row_number: rentRowNumber.row_number, month: new Date().getMonth() + 1, is_paid: true },
+      payload: { row_number: rentRowNumber.row_number, year: new Date().getFullYear(), month: new Date().getMonth() + 1, is_paid: true },
       cookies: { token: admin.token },
     });
     // Add carpentry income
@@ -125,6 +125,103 @@ describe('GET /api/data', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/data' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('filters activity totals by the requested reporting period', async () => {
+    const requests = [
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'income', amount: 110, description: 'مبيعات يناير', date: '2025-01-10' },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'expense', amount: 10, description: 'January expense', date: '2025-01-11' },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'income', amount: 220, description: 'مبيعات فبراير', date: '2025-02-10' },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'expense', amount: 20, description: 'February expense', date: '2025-02-11' },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/carpentry/income/add',
+        payload: { amount: 30, description: 'January workshop', date: '2025-01-12' },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/carpentry/expense/add',
+        payload: { amount: 5, description: 'January workshop expense', date: '2025-01-13' },
+        cookies: { token: admin.token },
+      }),
+    ];
+    await Promise.all(requests);
+
+    const rentResponse = await app.inject({
+      method: 'POST',
+      url: '/api/rent/add',
+      payload: { rentee_name: 'Historical renter', rent_amount: 40 },
+      cookies: { token: admin.token },
+    });
+    const rentResult = rentResponse.json().result as { row_number: number };
+    await app.inject({
+      method: 'POST',
+      url: '/api/rent/month',
+      payload: { row_number: rentResult.row_number, year: 2025, month: 1, is_paid: true },
+      cookies: { token: admin.token },
+    });
+
+    const januaryResponse = await app.inject({
+      method: 'GET',
+      url: '/api/data?year=2025&month=1',
+      cookies: { token: admin.token },
+    });
+    const january = januaryResponse.json() as Record<string, unknown>;
+
+    expect(januaryResponse.statusCode).toBe(200);
+    expect(january.total_sales).toBe(110);
+    expect(january.total_income).toBe(180);
+    expect(january.total_payments).toBe(10);
+    expect(january.net_income).toBe(170);
+    expect(january.rentals).toBe(40);
+    expect(january.other_business_income).toBe(30);
+    expect(january.carpentry_business_expenses).toBe(5);
+    expect(january.daily_sales).toEqual([
+      { day: 'Jan 10', amount: 110, date: '2025-01-10' },
+    ]);
+
+    const februaryResponse = await app.inject({
+      method: 'GET',
+      url: '/api/data?year=2025&month=2',
+      cookies: { token: admin.token },
+    });
+    const february = februaryResponse.json() as Record<string, unknown>;
+    expect(february.total_sales).toBe(220);
+    expect(february.total_income).toBe(220);
+    expect(february.total_payments).toBe(20);
+    expect(february.rentals).toBe(0);
+    expect(february.other_business_income).toBe(0);
+    expect(february.carpentry_business_expenses).toBe(0);
+  });
+
+  it('rejects an invalid reporting period', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/data?year=2025&month=13',
+      cookies: { token: admin.token },
+    });
+    expect(response.statusCode).toBe(400);
   });
 });
 

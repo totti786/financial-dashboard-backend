@@ -164,10 +164,12 @@ targetDb.exec(`
   CREATE TABLE IF NOT EXISTS rent_payments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rent_id INTEGER NOT NULL REFERENCES rent(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
     month INTEGER NOT NULL,
+    rent_amount REAL NOT NULL DEFAULT 0,
     is_paid INTEGER NOT NULL DEFAULT 0,
     is_sham_cash INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(rent_id, month)
+    UNIQUE(rent_id, year, month)
   );
 
   CREATE TABLE IF NOT EXISTS warehouse_inventory (
@@ -411,7 +413,7 @@ const insertRent = targetDb.prepare(
   'INSERT INTO rent (rentee_name, rent_amount, year, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
 );
 const insertRentPayment = targetDb.prepare(
-  'INSERT INTO rent_payments (rent_id, month, is_paid, is_sham_cash) VALUES (?, ?, ?, ?)'
+  'INSERT INTO rent_payments (rent_id, year, month, rent_amount, is_paid, is_sham_cash) VALUES (?, ?, ?, ?, ?, ?)'
 );
 
 for (const r of oldRent) {
@@ -431,7 +433,7 @@ for (const r of oldRent) {
   for (let m = 1; m <= 12; m++) {
     const key = `month_${m}` as keyof typeof r;
     const isPaid = (r[key] as number) ?? 0;
-    insertRentPayment.run(rentId, m, isPaid, isShamCash);
+    insertRentPayment.run(rentId, r.year ?? 2026, m, parseAmount(r.rent_amount as string | number | null), isPaid, isShamCash);
     counts.rent_payments++;
   }
   counts.rent++;

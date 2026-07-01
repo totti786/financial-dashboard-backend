@@ -33,6 +33,7 @@ export type Rentee = z.infer<typeof RenteeSchema>;
 export const AddRenteeRequestSchema = z.object({
   rentee_name: z.string(),
   rent_amount: z.number().optional(),
+  year: z.number().int().min(2000).max(2100).optional(),
 });
 export type AddRenteeRequest = z.infer<typeof AddRenteeRequestSchema>;
 
@@ -53,6 +54,7 @@ export type UpdateRenteeRequest = z.infer<typeof UpdateRenteeRequestSchema>;
 
 export const UpdateRentMonthRequestSchema = z.object({
   row_number: z.number(),
+  year: z.number().int().min(2000).max(2100),
   month: z.number(),
   is_paid: z.boolean(),
   is_sham_cash: z.boolean().optional(),

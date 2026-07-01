@@ -127,10 +127,12 @@ function seed() {
     CREATE TABLE IF NOT EXISTS rent_payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       rent_id INTEGER NOT NULL REFERENCES rent(id) ON DELETE CASCADE,
+      year INTEGER NOT NULL,
       month INTEGER NOT NULL,
+      rent_amount REAL NOT NULL DEFAULT 0,
       is_paid INTEGER NOT NULL DEFAULT 0,
       is_sham_cash INTEGER NOT NULL DEFAULT 0,
-      UNIQUE(rent_id, month)
+      UNIQUE(rent_id, year, month)
     );
 
     CREATE TABLE IF NOT EXISTS warehouse_inventory (
@@ -424,8 +426,8 @@ function seed() {
   `);
 
   const insertRentPayment = db.prepare(`
-    INSERT INTO rent_payments (rent_id, month, is_paid, is_sham_cash)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO rent_payments (rent_id, year, month, rent_amount, is_paid, is_sham_cash)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   for (let i = 0; i < rentees.length; i++) {
@@ -437,7 +439,7 @@ function seed() {
     for (let month = 1; month <= 6; month++) {
       const isPaid = month <= 4 ? 1 : (Math.random() > 0.5 ? 1 : 0);
       const isShamCash = isPaid && Math.random() > 0.7 ? 1 : 0;
-      insertRentPayment.run(rentId, month, isPaid, isShamCash);
+      insertRentPayment.run(rentId, 2026, month, rentee.amount, isPaid, isShamCash);
     }
   }
   console.log('✅ Inserted rent data for 4 rentees with monthly payments');

@@ -87,7 +87,7 @@ describe('Rent CRUD lifecycle', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/rent/month',
-      payload: { row_number: rowNumber, month: 3, is_paid: true },
+      payload: { row_number: rowNumber, year: new Date().getFullYear(), month: 3, is_paid: true },
       cookies: { token: admin.token },
     });
     expect(res.statusCode).toBe(200);
@@ -116,7 +116,7 @@ describe('Rent CRUD lifecycle', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/rent/month',
-      payload: { row_number: rowNumber, month: 3, is_paid: true, is_sham_cash: true },
+      payload: { row_number: rowNumber, year: new Date().getFullYear(), month: 3, is_paid: true, is_sham_cash: true },
       cookies: { token: admin.token },
     });
     expect(res.statusCode).toBe(200);
@@ -140,7 +140,7 @@ describe('Rent CRUD lifecycle', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/rent/month',
-      payload: { row_number: rowNumber, month: 13, is_paid: true },
+      payload: { row_number: rowNumber, year: new Date().getFullYear(), month: 13, is_paid: true },
       cookies: { token: admin.token },
     });
     expect(res.statusCode).toBe(400);
@@ -183,5 +183,64 @@ describe('Rent amount types', () => {
     for (const r of rentData) {
       expect(typeof r.rent_amount).toBe('number');
     }
+  });
+});
+
+describe('Rent payment history by year', () => {
+  let rowNumber: number;
+
+  it('keeps the same month independent across years', async () => {
+    const addResponse = await app.inject({
+      method: 'POST',
+      url: '/api/rent/add',
+      payload: { rentee_name: 'Year-aware renter', rent_amount: 750 },
+      cookies: { token: admin.token },
+    });
+    rowNumber = addResponse.json().result.row_number as number;
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/rent/month',
+      payload: { row_number: rowNumber, year: 2025, month: 3, is_paid: true },
+      cookies: { token: admin.token },
+    });
+
+    const response2025 = await app.inject({
+      method: 'GET',
+      url: '/api/rent?year=2025',
+      cookies: { token: admin.token },
+    });
+    const response2026 = await app.inject({
+      method: 'GET',
+      url: '/api/rent?year=2026',
+      cookies: { token: admin.token },
+    });
+
+    const renter2025 = response2025.json().rent_data.find(
+      (renter: { row_number: number }) => renter.row_number === rowNumber,
+    );
+    const renter2026 = response2026.json().rent_data.find(
+      (renter: { row_number: number }) => renter.row_number === rowNumber,
+    );
+
+    expect(renter2025.monthly_payments[2]).toBe(1);
+    expect(renter2026.monthly_payments[2]).toBe(0);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/rent/month',
+      payload: { row_number: rowNumber, year: 2026, month: 3, is_paid: true },
+      cookies: { token: admin.token },
+    });
+
+    const stillPaid2025 = await app.inject({
+      method: 'GET',
+      url: '/api/rent?year=2025',
+      cookies: { token: admin.token },
+    });
+    const historicalRenter = stillPaid2025.json().rent_data.find(
+      (renter: { row_number: number }) => renter.row_number === rowNumber,
+    );
+    expect(historicalRenter.monthly_payments[2]).toBe(1);
   });
 });

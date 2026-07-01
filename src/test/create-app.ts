@@ -148,10 +148,12 @@ export async function createTestApp(dbPath: string = ':memory:'): Promise<Return
     CREATE TABLE IF NOT EXISTS rent_payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       rent_id INTEGER NOT NULL REFERENCES rent(id) ON DELETE CASCADE,
+      year INTEGER NOT NULL,
       month INTEGER NOT NULL,
+      rent_amount REAL NOT NULL DEFAULT 0,
       is_paid INTEGER NOT NULL DEFAULT 0,
       is_sham_cash INTEGER NOT NULL DEFAULT 0,
-      UNIQUE(rent_id, month)
+      UNIQUE(rent_id, year, month)
     );
 
     CREATE TABLE IF NOT EXISTS warehouse_inventory (

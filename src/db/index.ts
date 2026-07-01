@@ -57,6 +57,52 @@ export function closeDb(): void {
   }
 }
 
+/** Upgrade legacy rent payments so the same calendar month can be retained across years. */
+export function migrateRentPaymentsForReportingPeriods(db: Database.Database = getDb()): void {
+  const table = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'rent_payments'",
+  ).get();
+  if (!table) return;
+
+  const columns = db.prepare('PRAGMA table_info(rent_payments)').all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === 'year') && columns.some((column) => column.name === 'rent_amount')) {
+    return;
+  }
+
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE rent_payments RENAME TO rent_payments_legacy;
+        CREATE TABLE rent_payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rent_id INTEGER NOT NULL REFERENCES rent(id) ON DELETE CASCADE,
+          year INTEGER NOT NULL,
+          month INTEGER NOT NULL,
+          rent_amount REAL NOT NULL DEFAULT 0,
+          is_paid INTEGER NOT NULL DEFAULT 0,
+          is_sham_cash INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(rent_id, year, month)
+        );
+        INSERT INTO rent_payments (id, rent_id, year, month, rent_amount, is_paid, is_sham_cash)
+        SELECT
+          payment.id,
+          payment.rent_id,
+          COALESCE(rent.year, CAST(strftime('%Y', 'now') AS INTEGER)),
+          payment.month,
+          COALESCE(rent.rent_amount, 0),
+          payment.is_paid,
+          payment.is_sham_cash
+        FROM rent_payments_legacy AS payment
+        INNER JOIN rent ON rent.id = payment.rent_id;
+        DROP TABLE rent_payments_legacy;
+      `);
+    })();
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // ── User queries ──────────────────────────────────────────────────────────
 
 export interface UserRow {

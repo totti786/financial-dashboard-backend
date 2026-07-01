@@ -6,17 +6,18 @@ import {
   carpentryIncome,
   carpentryExpenses,
   rentPayments,
-  rent,
   monthlySales,
   trackedCells,
 } from '../db/schema.js';
-import { eq, and, like, not, sum, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, like, not, sum, gte, lt, sql } from 'drizzle-orm';
 import type { DashboardData, MonthlySalesResponse } from '../schemas/dashboard.schema.js';
 
-const CURRENT_YEAR = new Date().getFullYear();
-
-function currentMonth(): number {
-  return new Date().getMonth() + 1;
+function reportingPeriodBounds(year: number, month: number): { start: string; end: string } {
+  const start = `${year}-${String(month).padStart(2, '0')}-01`;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const end = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  return { start, end };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -47,23 +48,21 @@ function getCarpentryShopExpenses(db: ReturnType<typeof getDrizzleDb>, month: nu
 }
 
 /** Rent collected for the given month (non-sham-cash) */
-function getRentForMonth(db: ReturnType<typeof getDrizzleDb>, month: number): number {
+function getRentForMonth(db: ReturnType<typeof getDrizzleDb>, month: number, year: number): number {
   const row = db
-    .select({ total: sum(rent.rentAmount) })
-    .from(rent)
-    .innerJoin(rentPayments, eq(rent.id, rentPayments.rentId))
-    .where(and(eq(rentPayments.month, month), eq(rentPayments.isPaid, 1), eq(rentPayments.isShamCash, 0)))
+    .select({ total: sum(rentPayments.rentAmount) })
+    .from(rentPayments)
+    .where(and(eq(rentPayments.year, year), eq(rentPayments.month, month), eq(rentPayments.isPaid, 1), eq(rentPayments.isShamCash, 0)))
     .get();
   return Number(row?.total ?? 0);
 }
 
 /** Sham cash rent for the given month */
-function getShamCashRentForMonth(db: ReturnType<typeof getDrizzleDb>, month: number): number {
+function getShamCashRentForMonth(db: ReturnType<typeof getDrizzleDb>, month: number, year: number): number {
   const row = db
-    .select({ total: sum(rent.rentAmount) })
-    .from(rent)
-    .innerJoin(rentPayments, eq(rent.id, rentPayments.rentId))
-    .where(and(eq(rentPayments.month, month), eq(rentPayments.isPaid, 1), eq(rentPayments.isShamCash, 1)))
+    .select({ total: sum(rentPayments.rentAmount) })
+    .from(rentPayments)
+    .where(and(eq(rentPayments.year, year), eq(rentPayments.month, month), eq(rentPayments.isPaid, 1), eq(rentPayments.isShamCash, 1)))
     .get();
   return Number(row?.total ?? 0);
 }
@@ -86,7 +85,8 @@ interface DailySaleEntry {
   date: string;
 }
 
-function calculateDailySales(db: ReturnType<typeof getDrizzleDb>): DailySaleEntry[] {
+function calculateDailySales(db: ReturnType<typeof getDrizzleDb>, year: number, month: number): DailySaleEntry[] {
+  const { start, end } = reportingPeriodBounds(year, month);
   // Only income: مبيعات in description OR exactly "شام كاش"
   const incomeSales = db
     .select({
@@ -95,7 +95,11 @@ function calculateDailySales(db: ReturnType<typeof getDrizzleDb>): DailySaleEntr
       description: income.description,
     })
     .from(income)
-    .where(sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`)
+    .where(and(
+      gte(income.date, start),
+      lt(income.date, end),
+      sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`,
+    ))
     .all();
 
   // Aggregate by date (income only, no expenses)
@@ -121,7 +125,7 @@ function calculateDailySales(db: ReturnType<typeof getDrizzleDb>): DailySaleEntr
   });
 }
 
-function calculateProjections(dailySales: DailySaleEntry[]) {
+function calculateProjections(dailySales: DailySaleEntry[], year: number, month: number) {
   if (dailySales.length === 0) {
     return { total_to_date: 0, avg_daily: 0, remaining_days: 0, projected_total: 0 };
   }
@@ -132,6 +136,10 @@ function calculateProjections(dailySales: DailySaleEntry[]) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const isCurrentPeriod = today.getFullYear() === year && today.getMonth() + 1 === month;
+  if (!isCurrentPeriod) {
+    return { total_to_date: totalToDate, avg_daily: avgDaily, remaining_days: 0, projected_total: totalToDate };
+  }
   const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
   let remainingDays = 0;
@@ -155,21 +163,28 @@ function calculateProjections(dailySales: DailySaleEntry[]) {
 
 // ── Main Dashboard Data ─────────────────────────────────────────────────────
 
-export function getDashboardData(): DashboardData {
+export function getDashboardData(
+  year: number = new Date().getFullYear(),
+  month: number = new Date().getMonth() + 1,
+): DashboardData {
   const db = getDrizzleDb();
-  const month = currentMonth();
-  const year = CURRENT_YEAR;
+  const { start, end } = reportingPeriodBounds(year, month);
 
   // total_income: all income except sham cash (by flag AND by description) + carpentry + rent
   const totalIncomeRow = db
     .select({ total: sum(income.amount) })
     .from(income)
-    .where(and(eq(income.isShamCash, 0), not(like(income.description, '%شام كاش%'))))
+    .where(and(
+      gte(income.date, start),
+      lt(income.date, end),
+      eq(income.isShamCash, 0),
+      not(like(income.description, '%شام كاش%')),
+    ))
     .get();
   const baseIncome = Number(totalIncomeRow?.total ?? 0);
 
   const carpentryShopIncome = getCarpentryShopIncome(db, month, year);
-  const rentalsIncome = getRentForMonth(db, month);
+  const rentalsIncome = getRentForMonth(db, month, year);
 
   const total_income = baseIncome + carpentryShopIncome + rentalsIncome;
 
@@ -177,7 +192,11 @@ export function getDashboardData(): DashboardData {
   const salesIncome = db
     .select({ total: sum(income.amount) })
     .from(income)
-    .where(sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`)
+    .where(and(
+      gte(income.date, start),
+      lt(income.date, end),
+      sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`,
+    ))
     .get();
   const total_sales = Number(salesIncome?.total ?? 0);
 
@@ -185,14 +204,14 @@ export function getDashboardData(): DashboardData {
   const shamCashExpenses = db
     .select({ total: sum(expenses.amount) })
     .from(expenses)
-    .where(eq(expenses.description, 'شام كاش'))
+    .where(and(gte(expenses.date, start), lt(expenses.date, end), eq(expenses.description, 'شام كاش')))
     .get();
   const shamCashIncomeRows = db
     .select({ total: sum(income.amount) })
     .from(income)
-    .where(like(income.description, '%شام كاش%'))
+    .where(and(gte(income.date, start), lt(income.date, end), like(income.description, '%شام كاش%')))
     .get();
-  const shamCashRent = getShamCashRentForMonth(db, month);
+  const shamCashRent = getShamCashRentForMonth(db, month, year);
 
   const sham_cash_income =
     Number(shamCashExpenses?.total ?? 0) +
@@ -203,7 +222,12 @@ export function getDashboardData(): DashboardData {
   const shamCashExpensesRows = db
     .select({ total: sum(expenses.amount) })
     .from(expenses)
-    .where(and(like(expenses.description, '%شام كاش%'), sql`${expenses.description} != 'شام كاش'`))
+    .where(and(
+      gte(expenses.date, start),
+      lt(expenses.date, end),
+      like(expenses.description, '%شام كاش%'),
+      sql`${expenses.description} != 'شام كاش'`,
+    ))
     .get();
   const sham_cash_expenses = Number(shamCashExpensesRows?.total ?? 0);
 
@@ -211,7 +235,11 @@ export function getDashboardData(): DashboardData {
   const totalExpensesRow = db
     .select({ total: sum(expenses.amount) })
     .from(expenses)
-    .where(sql`${expenses.description} NOT LIKE '%شام كاش%'`)
+    .where(and(
+      gte(expenses.date, start),
+      lt(expenses.date, end),
+      sql`${expenses.description} NOT LIKE '%شام كاش%'`,
+    ))
     .get();
   const regularExpenses = Number(totalExpensesRow?.total ?? 0);
   const carpentryShopExpenses = getCarpentryShopExpenses(db, month, year);
@@ -234,7 +262,7 @@ export function getDashboardData(): DashboardData {
   const personalRow = db
     .select({ total: sum(expenses.amount) })
     .from(expenses)
-    .where(like(expenses.description, '%زياد%'))
+    .where(and(gte(expenses.date, start), lt(expenses.date, end), like(expenses.description, '%زياد%')))
     .get();
   const personal_expenses = Number(personalRow?.total ?? 0);
 
@@ -245,8 +273,8 @@ export function getDashboardData(): DashboardData {
   const total_payments = regularExpenses;
 
   // daily_sales + projections
-  const daily_sales = calculateDailySales(db);
-  const projections = calculateProjections(daily_sales);
+  const daily_sales = calculateDailySales(db, year, month);
+  const projections = calculateProjections(daily_sales, year, month);
 
   // rentals = total rent collected for current month
   const rentals = rentalsIncome + shamCashRent;
@@ -254,8 +282,8 @@ export function getDashboardData(): DashboardData {
   // other_business_income = carpentry income for current month
   const other_business_income = carpentryShopIncome;
 
-  // carpentry_business_expenses = tracked cell K12
-  const carpentry_business_expenses = getTrackedCell(db, 'K12');
+  // Workshop expenses for the selected reporting period.
+  const carpentry_business_expenses = carpentryShopExpenses;
 
   return {
     total_income,
