@@ -209,8 +209,8 @@ describe('Other entities endpoint', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(body.success).toBe(true);
-    const suppliers = body.suppliers as Array<Record<string, unknown>>;
-    const found = suppliers.find((s) => s.name === otherName);
+    const others = body.others as Array<Record<string, unknown>>;
+    const found = others.find((s) => s.name === otherName);
     expect(found).toBeDefined();
   });
 });
