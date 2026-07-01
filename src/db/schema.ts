@@ -211,6 +211,8 @@ export const monthlySales = sqliteTable('monthly_sales', {
   monthNumber: integer('month_number').notNull(),
   monthName: text('month_name').notNull(),
   salesAmount: real('sales_amount').notNull(),
+  finalizedAt: text('finalized_at'),
+  finalizedBy: text('finalized_by'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
 }, (table) => ({

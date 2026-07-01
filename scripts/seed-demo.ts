@@ -185,6 +185,8 @@ function seed() {
       month_number INTEGER NOT NULL,
       month_name TEXT NOT NULL,
       sales_amount REAL NOT NULL,
+      finalized_at TEXT,
+      finalized_by TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(year, month_number)

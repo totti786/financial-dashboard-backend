@@ -222,6 +222,8 @@ targetDb.exec(`
     month_number INTEGER NOT NULL,
     month_name TEXT NOT NULL,
     sales_amount REAL NOT NULL,
+    finalized_at TEXT,
+    finalized_by TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(year, month_number)

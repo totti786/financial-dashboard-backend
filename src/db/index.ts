@@ -103,6 +103,23 @@ export function migrateRentPaymentsForReportingPeriods(db: Database.Database = g
   }
 }
 
+/** Add audit metadata used when an operator finalizes a monthly sales snapshot. */
+export function migrateMonthlySalesFinalization(db: Database.Database = getDb()): void {
+  const table = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'monthly_sales'",
+  ).get();
+  if (!table) return;
+
+  const columns = db.prepare('PRAGMA table_info(monthly_sales)').all() as Array<{ name: string }>;
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('finalized_at')) {
+    db.exec('ALTER TABLE monthly_sales ADD COLUMN finalized_at TEXT');
+  }
+  if (!names.has('finalized_by')) {
+    db.exec('ALTER TABLE monthly_sales ADD COLUMN finalized_by TEXT');
+  }
+}
+
 // ── User queries ──────────────────────────────────────────────────────────
 
 export interface UserRow {

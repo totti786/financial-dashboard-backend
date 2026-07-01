@@ -244,4 +244,101 @@ describe('GET /api/monthly-sales', () => {
     expect(body).toHaveProperty('sales_by_year');
     expect(body).toHaveProperty('available_years');
   });
+
+  it('aggregates retained sales transactions into their historical months', async () => {
+    await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'income', amount: 125, description: 'مبيعات آذار', date: '2024-03-05', is_sales: true },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'income', amount: 75, description: 'مبيعات آذار', date: '2024-03-20', is_sales: true },
+        cookies: { token: admin.token },
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/api/transactions/add',
+        payload: { type: 'income', amount: 999, description: 'Not a sale', date: '2024-03-21' },
+        cookies: { token: admin.token },
+      }),
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/monthly-sales',
+      cookies: { token: admin.token },
+    });
+    const body = response.json() as {
+      sales_by_year: Record<string, Array<{ month_index: number; amount: number }>>;
+      available_years: string[];
+    };
+    const march = body.sales_by_year['2024']?.find((entry) => entry.month_index === 3);
+
+    expect(response.statusCode).toBe(200);
+    expect(march?.amount).toBe(200);
+    expect(body.available_years).toContain('2024');
+  });
+
+  it('finalizes a monthly sales snapshot and only changes it when re-finalized', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/transactions/add',
+      payload: { type: 'income', amount: 300, description: 'مبيعات نيسان', date: '2024-04-10', is_sales: true },
+      cookies: { token: admin.token },
+    });
+
+    const finalizeResponse = await app.inject({
+      method: 'POST',
+      url: '/api/monthly-sales/finalize',
+      payload: { year: 2024, month: 4 },
+      cookies: { token: admin.token },
+    });
+    expect(finalizeResponse.statusCode).toBe(200);
+    expect(finalizeResponse.json().result).toMatchObject({
+      year: 2024,
+      month_index: 4,
+      amount: 300,
+      finalized_by: admin.username,
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/transactions/add',
+      payload: { type: 'income', amount: 50, description: 'مبيعات تصحيح', date: '2024-04-20', is_sales: true },
+      cookies: { token: admin.token },
+    });
+
+    const afterCorrection = await app.inject({
+      method: 'GET',
+      url: '/api/monthly-sales',
+      cookies: { token: admin.token },
+    });
+    const frozenApril = afterCorrection.json().sales_by_year['2024'].find(
+      (entry: { month_index: number }) => entry.month_index === 4,
+    );
+    expect(frozenApril.amount).toBe(300);
+
+    const refinalizeResponse = await app.inject({
+      method: 'POST',
+      url: '/api/monthly-sales/finalize',
+      payload: { year: 2024, month: 4 },
+      cookies: { token: admin.token },
+    });
+    expect(refinalizeResponse.json().result.amount).toBe(350);
+  });
+
+  it('does not finalize the current calendar month', async () => {
+    const now = new Date();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/monthly-sales/finalize',
+      payload: { year: now.getFullYear(), month: now.getMonth() + 1 },
+      cookies: { token: admin.token },
+    });
+    expect(response.statusCode).toBe(400);
+  });
 });

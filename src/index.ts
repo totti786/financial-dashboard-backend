@@ -16,7 +16,7 @@ import { adminRoutes, userRoutes, auditRoutes } from './routes/admin.routes.js';
 import { syncRoutes, dataVersionRoutes } from './routes/sync.routes.js';
 import { streamRoutes } from './routes/stream.routes.js';
 import { bumpVersion } from './services/data-version.service.js';
-import { migrateRentPaymentsForReportingPeriods } from './db/index.js';
+import { migrateMonthlySalesFinalization, migrateRentPaymentsForReportingPeriods } from './db/index.js';
 
 const app = Fastify({ logger: true });
 
@@ -44,6 +44,7 @@ await app.register(dataVersionRoutes, { prefix: '/api' });
 await app.register(streamRoutes, { prefix: '/api' });
 
 migrateRentPaymentsForReportingPeriods();
+migrateMonthlySalesFinalization();
 
 // Bump data version after every successful mutation (POST/PUT/DELETE with 2xx)
 app.addHook('onResponse', (request, reply, done) => {

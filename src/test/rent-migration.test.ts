@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
-import { migrateRentPaymentsForReportingPeriods } from '../db/index.js';
+import { migrateMonthlySalesFinalization, migrateRentPaymentsForReportingPeriods } from '../db/index.js';
 
 let db: Database.Database | null = null;
 
@@ -46,5 +46,30 @@ describe('rent payment reporting-period migration', () => {
       INSERT INTO rent_payments (rent_id, year, month, rent_amount, is_paid)
       VALUES (1, 2027, 3, 500, 1)
     `).run()).not.toThrow();
+  });
+});
+
+describe('monthly sales finalization migration', () => {
+  it('adds finalization audit columns without losing imported totals', () => {
+    db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE monthly_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        year INTEGER NOT NULL,
+        month_number INTEGER NOT NULL,
+        month_name TEXT NOT NULL,
+        sales_amount REAL NOT NULL,
+        UNIQUE(year, month_number)
+      );
+      INSERT INTO monthly_sales (year, month_number, month_name, sales_amount)
+      VALUES (2025, 12, 'December', 900);
+    `);
+
+    migrateMonthlySalesFinalization(db);
+
+    const row = db.prepare(
+      'SELECT sales_amount, finalized_at, finalized_by FROM monthly_sales',
+    ).get() as { sales_amount: number; finalized_at: string | null; finalized_by: string | null };
+    expect(row).toEqual({ sales_amount: 900, finalized_at: null, finalized_by: null });
   });
 });

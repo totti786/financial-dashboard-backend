@@ -20,6 +20,10 @@ function reportingPeriodBounds(year: number, month: number): { start: string; en
   return { start, end };
 }
 
+function salesIncomeCondition() {
+  return sql`(${income.isSales} = 1 OR ${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Carpentry shop income for the given month/year */
@@ -98,7 +102,7 @@ function calculateDailySales(db: ReturnType<typeof getDrizzleDb>, year: number, 
     .where(and(
       gte(income.date, start),
       lt(income.date, end),
-      sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`,
+      salesIncomeCondition(),
     ))
     .all();
 
@@ -195,7 +199,7 @@ export function getDashboardData(
     .where(and(
       gte(income.date, start),
       lt(income.date, end),
-      sql`(${like(income.description, '%مبيعات%')} OR ${income.description} = 'شام كاش')`,
+      salesIncomeCondition(),
     ))
     .get();
   const total_sales = Number(salesIncome?.total ?? 0);
@@ -309,6 +313,76 @@ export function getDashboardData(
 
 // ── Monthly Sales ───────────────────────────────────────────────────────────
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function getSalesTotalForPeriod(
+  db: ReturnType<typeof getDrizzleDb>,
+  year: number,
+  month: number,
+): number {
+  const { start, end } = reportingPeriodBounds(year, month);
+  const row = db
+    .select({ total: sum(income.amount) })
+    .from(income)
+    .where(and(gte(income.date, start), lt(income.date, end), salesIncomeCondition()))
+    .get();
+  return Number(row?.total ?? 0);
+}
+
+export interface FinalizedMonthlySales {
+  year: number;
+  month_index: number;
+  month: string;
+  amount: number;
+  finalized_at: string;
+  finalized_by: string;
+}
+
+export function finalizeMonthlySales(
+  year: number,
+  month: number,
+  finalizedBy: string,
+): FinalizedMonthlySales {
+  const db = getDrizzleDb();
+  const amount = getSalesTotalForPeriod(db, year, month);
+  const finalizedAt = new Date().toISOString();
+  const monthName = MONTH_NAMES[month - 1];
+
+  db.insert(monthlySales)
+    .values({
+      year,
+      monthNumber: month,
+      monthName,
+      salesAmount: amount,
+      finalizedAt,
+      finalizedBy,
+      updatedAt: finalizedAt,
+    })
+    .onConflictDoUpdate({
+      target: [monthlySales.year, monthlySales.monthNumber],
+      set: {
+        monthName,
+        salesAmount: amount,
+        finalizedAt,
+        finalizedBy,
+        updatedAt: finalizedAt,
+      },
+    })
+    .run();
+
+  return {
+    year,
+    month_index: month,
+    month: monthName,
+    amount,
+    finalized_at: finalizedAt,
+    finalized_by: finalizedBy,
+  };
+}
+
 export function getMonthlySales(): MonthlySalesResponse {
   const db = getDrizzleDb();
 
@@ -323,10 +397,55 @@ export function getMonthlySales(): MonthlySalesResponse {
     .orderBy(monthlySales.year, monthlySales.monthNumber)
     .all();
 
+  const transactionSales = db
+    .select({ date: income.date, amount: income.amount })
+    .from(income)
+    .where(salesIncomeCondition())
+    .all();
+
+  const totalsByPeriod = new Map<string, { year: number; monthNumber: number; monthName: string; salesAmount: number }>();
+
+  // Imported monthly rows remain available for periods without retained transactions.
+  for (const row of rows) {
+    totalsByPeriod.set(`${row.year}-${row.monthNumber}`, row);
+  }
+
+  // Retained transactions provide live/fallback totals when no finalized snapshot exists.
+  const transactionTotals = new Map<string, { year: number; monthNumber: number; salesAmount: number }>();
+  for (const sale of transactionSales) {
+    const match = sale.date?.match(/^(\d{4})-(\d{2})-\d{2}$/);
+    if (!match) continue;
+    const year = Number(match[1]);
+    const monthNumber = Number(match[2]);
+    if (monthNumber < 1 || monthNumber > 12) continue;
+    const key = `${year}-${monthNumber}`;
+    const existing = transactionTotals.get(key);
+    transactionTotals.set(key, {
+      year,
+      monthNumber,
+      salesAmount: (existing?.salesAmount ?? 0) + sale.amount,
+    });
+  }
+
+  const now = new Date();
+  const currentKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+  for (const [key, total] of transactionTotals) {
+    if (!totalsByPeriod.has(key) || key === currentKey) {
+      totalsByPeriod.set(key, {
+        ...total,
+        monthName: MONTH_NAMES[total.monthNumber - 1],
+      });
+    }
+  }
+
   const salesByYear: Record<string, { month: string; amount: number; month_index: number }[]> = {};
   const yearSet = new Set<string>();
 
-  for (const r of rows) {
+  const mergedRows = [...totalsByPeriod.values()].sort(
+    (a, b) => a.year - b.year || a.monthNumber - b.monthNumber,
+  );
+
+  for (const r of mergedRows) {
     const y = String(r.year);
     yearSet.add(y);
     if (!salesByYear[y]) salesByYear[y] = [];

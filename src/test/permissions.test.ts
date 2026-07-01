@@ -52,6 +52,7 @@ describe('401 — no auth token', () => {
     { method: 'GET', url: '/api/warehouse' },
     { method: 'POST', url: '/api/warehouse/add', payload: { timber_type: 'Oak', length: 100, width: 10, thickness: 2 } },
     { method: 'GET', url: '/api/data' },
+    { method: 'POST', url: '/api/monthly-sales/finalize', payload: { year: 2026, month: 1 } },
     { method: 'GET', url: '/api/users' },
     { method: 'GET', url: '/api/audit' },
   ];
@@ -75,6 +76,7 @@ describe('403 — view-only user', () => {
     { method: 'POST', url: '/api/transactions/add', payload: { type: 'income', amount: 100, description: 'x', date: '2026-01-01' } },
     { method: 'POST', url: '/api/transactions/update', payload: { type: 'income', row_number: 1, amount: 100, description: 'x', date: '2026-01-01' } },
     { method: 'POST', url: '/api/transactions/delete', payload: { type: 'income', row_number: 1 } },
+    { method: 'POST', url: '/api/monthly-sales/finalize', payload: { year: 2026, month: 1 } },
     { method: 'POST', url: '/api/debts/add', payload: { amount: 100, description: 'x', date: '2026-01-01' } },
     { method: 'POST', url: '/api/debts/pay', payload: { row_number: 1, payment_amount: -50 } },
     { method: 'POST', url: '/api/debts/delete', payload: { row_number: 1 } },
